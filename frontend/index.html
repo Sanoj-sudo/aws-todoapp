@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taskflow - AWS Three-Tier Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Decorative animated background -->
+  <div class="bg" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
+
+  <!-- ============ AUTH VIEW ============ -->
+  <section id="auth-view" class="auth hidden">
+    <div class="auth-hero">
+      <div class="brand"><span class="logo">✓</span> Taskflow</div>
+      <h1>Organize your work,<br /><span class="gradient-text">one task at a time.</span></h1>
+      <p class="muted">A simple todo app running on a highly available AWS three-tier architecture.</p>
+      <ul class="arch">
+        <li><span class="arch-icon">🌐</span><div><b>Web tier</b><small>Nginx behind a public ALB</small></div></li>
+        <li><span class="arch-icon">⚙️</span><div><b>App tier</b><small>Node.js API behind an internal ALB</small></div></li>
+        <li><span class="arch-icon">🗄️</span><div><b>Database tier</b><small>Amazon RDS for MySQL</small></div></li>
+      </ul>
+    </div>
+
+    <div class="auth-card glass">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="login" role="tab">Log in</button>
+        <button class="tab" data-tab="signup" role="tab">Sign up</button>
+        <span class="tab-indicator"></span>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <h2>Welcome back 👋</h2>
+        <p class="muted">Log in to see your tasks.</p>
+        <div class="field">
+          <input type="email" name="email" id="login-email" placeholder=" " required autocomplete="email" />
+          <label for="login-email">Email</label>
+        </div>
+        <div class="field">
+          <input type="password" name="password" id="login-password" placeholder=" " required autocomplete="current-password" />
+          <label for="login-password">Password</label>
+          <button type="button" class="toggle-pw" aria-label="Show password">👁</button>
+        </div>
+        <button type="submit" class="btn-primary"><span>Log in</span></button>
+      </form>
+
+      <form id="signup-form" class="auth-form hidden">
+        <h2>Create an account ✨</h2>
+        <p class="muted">It only takes a few seconds.</p>
+        <div class="field">
+          <input type="text" name="name" id="signup-name" placeholder=" " required maxlength="100" autocomplete="name" />
+          <label for="signup-name">Full name</label>
+        </div>
+        <div class="field">
+          <input type="email" name="email" id="signup-email" placeholder=" " required autocomplete="email" />
+          <label for="signup-email">Email</label>
+        </div>
+        <div class="field">
+          <input type="password" name="password" id="signup-password" placeholder=" " required minlength="6" autocomplete="new-password" />
+          <label for="signup-password">Password (min 6 characters)</label>
+          <button type="button" class="toggle-pw" aria-label="Show password">👁</button>
+        </div>
+        <button type="submit" class="btn-primary"><span>Create account</span></button>
+      </form>
+
+      <p id="auth-error" class="error" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- ============ TODO VIEW ============ -->
+  <section id="todo-view" class="app hidden">
+    <nav class="topbar">
+      <div class="brand"><span class="logo">✓</span> Taskflow</div>
+      <div id="user-bar" class="user-bar hidden">
+        <div class="user-chip">
+          <span id="user-avatar" class="avatar"></span>
+          <span id="user-name"></span>
+        </div>
+        <button id="logout" class="btn-ghost" title="Log out">⎋ Log out</button>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="hero-row">
+        <div>
+          <p class="muted" id="today"></p>
+          <h1 id="greeting">Hello!</h1>
+        </div>
+        <div class="progress-ring" id="progress-ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="ring-bg" cx="50" cy="50" r="42" />
+            <circle class="ring-fg" id="ring-fg" cx="50" cy="50" r="42" />
+          </svg>
+          <span id="progress-text">0%</span>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat glass"><span class="stat-icon s-total">📋</span><div><b id="stat-total">0</b><small>Total</small></div></div>
+        <div class="stat glass"><span class="stat-icon s-active">⏳</span><div><b id="stat-active">0</b><small>In progress</small></div></div>
+        <div class="stat glass"><span class="stat-icon s-done">🎉</span><div><b id="stat-done">0</b><small>Completed</small></div></div>
+      </div>
+
+      <div class="card glass">
+        <form id="todo-form" class="add-row">
+          <span class="add-icon">＋</span>
+          <input id="todo-title" placeholder="Add a new task and press Enter…" maxlength="255" required autocomplete="off" />
+          <button type="submit" class="btn-primary small"><span>Add task</span></button>
+        </form>
+
+        <div class="toolbar">
+          <div class="segmented">
+            <button class="filter active" data-filter="all">All</button>
+            <button class="filter" data-filter="active">Active</button>
+            <button class="filter" data-filter="completed">Completed</button>
+          </div>
+          <span id="todo-count" class="muted"></span>
+        </div>
+
+        <p id="todo-error" class="error" role="alert"></p>
+        <ul id="todo-list" class="todo-list"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Shows which instance in each tier served the request (for testing the ALBs) -->
+  <footer id="infra" class="infra">
+    <span class="pill"><i class="dot" id="dot-web"></i><b>Web</b> <span id="infra-web">…</span></span>
+    <span class="pill"><i class="dot" id="dot-app"></i><b>App</b> <span id="infra-app">…</span></span>
+    <span class="pill"><i class="dot" id="dot-db"></i><b>DB</b> <span id="infra-db">…</span></span>
+  </footer>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
