@@ -1,46 +1,41 @@
 #!/bin/bash
-# EC2 user-data for the WEB tier (Amazon Linux 2023, public subnet / behind public ALB).
-# Requirements:
-#   - Instance profile (IAM role) with s3:GetObject / s3:ListBucket on S3_BUCKET
-#   - Security group: allow 80 from the public ALB security group
+# Bakes the WEB tier AMI (Nginx + static frontend) on a temporary Ubuntu 22.04 / 24.04 builder.
+# Run it ONCE on the builder, then create the AMI from that instance.
+#
+#   scp -r frontend scripts ubuntu@<builder-ip>:~/aws-todoapp/   (or git clone on the builder)
+#   sudo bash ~/aws-todoapp/scripts/web-tier-ami-build.sh ~/aws-todoapp
+#   # then: EC2 console -> builder instance -> Actions -> Image -> Create image
+#
+# The backend URL (internal ALB) is NOT baked in: user data fills it in at boot
+# (see web-tier-userdata.sh).
 set -euxo pipefail
 
-# ======== EDIT THESE ========
-S3_BUCKET="my-three-tier-app-bucket"
-BACKEND_URL="http://internal-app-alb-xxxxxxxx.us-east-1.elb.amazonaws.com"
-# ============================
+SRC_DIR="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
+WEB_ROOT=/usr/share/nginx/html   # matches "root" in frontend/nginx.conf.template
 
-dnf install -y nginx
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y nginx curl
 
-# Copy frontend files from S3
-aws s3 cp "s3://${S3_BUCKET}/frontend/" /tmp/frontend/ --recursive
-cp /tmp/frontend/index.html /tmp/frontend/style.css /tmp/frontend/app.js /usr/share/nginx/html/
+# Static frontend
+mkdir -p "$WEB_ROOT"
+rm -f "$WEB_ROOT"/index.html "$WEB_ROOT"/web-info.json
+cp "$SRC_DIR/frontend/index.html" "$SRC_DIR/frontend/style.css" "$SRC_DIR/frontend/app.js" "$WEB_ROOT/"
 
-# Minimal nginx.conf (replaces AL2023's default server block)
-cat > /etc/nginx/nginx.conf <<'EOF'
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log;
-pid /run/nginx.pid;
-events { worker_connections 1024; }
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    access_log /var/log/nginx/access.log;
-    sendfile on;
-    include /etc/nginx/conf.d/*.conf;
-}
-EOF
+# Keep the template; user data turns it into /etc/nginx/conf.d/app.conf at boot
+cp "$SRC_DIR/frontend/nginx.conf.template" /etc/nginx/app.conf.template
 
-# Site config: point /api at the internal ALB
-sed "s|\\\${BACKEND_URL}|${BACKEND_URL}|g" /tmp/frontend/nginx.conf.template > /etc/nginx/conf.d/app.conf
+# Ubuntu's default site also listens on :80, so remove it
+rm -f /etc/nginx/sites-enabled/default
+rm -f /etc/nginx/conf.d/app.conf
 
-# Write this instance's identity so the UI shows which web server responded
-TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
-md() { curl -s -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1"; }
-cat > /usr/share/nginx/html/web-info.json <<EOF
-{"instance": "$(md instance-id)", "az": "$(md placement/availability-zone)", "privateIp": "$(md local-ipv4)"}
-EOF
+systemctl enable nginx
 
-nginx -t
-systemctl enable --now nginx
+# ---- Clean up so every instance launched from the AMI starts fresh ----
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+truncate -s 0 /etc/machine-id
+cloud-init clean --logs
+rm -f /home/ubuntu/.ssh/authorized_keys
+
+echo "Web AMI build done. Create the image now (do not reboot the builder first)."
