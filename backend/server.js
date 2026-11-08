@@ -47,7 +47,7 @@ async function loadInstanceInfo() {
       privateIp: await get('local-ipv4'),
     };
   } catch {
-    // Not on EC2 (e.g. local docker) - keep hostname fallback.
+    // Not on EC2 (e.g. a local machine) - keep hostname fallback.
   }
 }
 
