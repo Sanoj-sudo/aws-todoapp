@@ -1,7 +1,8 @@
 # Web tier Nginx config.
 # ${BACKEND_URL} = internal ALB DNS of the app tier, e.g.
 #   http://internal-app-alb-123456.us-east-1.elb.amazonaws.com
-# (docker image substitutes it automatically; the EC2 user-data script uses sed)
+# (scripts/install.sh fills both in with sed)
+# ${DNS_RESOLVER} = DNS server nginx uses to look up BACKEND_URL
 
 server {
     listen 80;
@@ -17,8 +18,15 @@ server {
         return 200 "ok\n";
     }
 
+    # Re-resolve the backend name every 30s (ALB IPs change). Using a variable in proxy_pass makes
+    # nginx resolve at request time, not only at startup.
+    # Resolver: 169.254.169.253 (Amazon VPC DNS) on EC2, the system resolver elsewhere.
+    resolver ${DNS_RESOLVER} valid=30s ipv6=off;
+    resolver_timeout 5s;
+    set $backend "${BACKEND_URL}";
+
     location /api/ {
-        proxy_pass ${BACKEND_URL};
+        proxy_pass $backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
