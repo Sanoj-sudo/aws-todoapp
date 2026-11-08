@@ -1,41 +1,19 @@
 #!/bin/bash
-# Bakes the WEB tier AMI (Nginx + static frontend) on a temporary Ubuntu 22.04 / 24.04 builder.
-# Run it ONCE on the builder, then create the AMI from that instance.
+# EC2 user data for the WEB tier (stock Ubuntu 22.04 / 24.04 AMI, public subnet).
+# Paste this whole file into: Launch template -> Advanced details -> User data
 #
-#   scp -r frontend scripts ubuntu@<builder-ip>:~/aws-todoapp/   (or git clone on the builder)
-#   sudo bash ~/aws-todoapp/scripts/web-tier-ami-build.sh ~/aws-todoapp
-#   # then: EC2 console -> builder instance -> Actions -> Image -> Create image
+# Requirements:
+#   - Outbound internet (public IP auto-assigned, or a NAT gateway) to install Nginx and fetch the code
+#   - web-sg:          allow 80 from public-alb-sg
+#   - internal-alb-sg: allow 80 from web-sg
 #
-# The backend URL (internal ALB) is NOT baked in: user data fills it in at boot
-# (see web-tier-userdata.sh).
-set -euxo pipefail
+# Logs: /var/log/cloud-init-output.log, /var/log/nginx/error.log
+set -euo pipefail
 
-SRC_DIR="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
-WEB_ROOT=/usr/share/nginx/html   # matches "root" in frontend/nginx.conf.template
+# ================= EDIT THESE =================
+export BACKEND_URL='http://internal-app-alb-xxxxxxxx.us-east-1.elb.amazonaws.com'   # internal ALB DNS, no trailing slash
+export REPO_BRANCH='main'
+# ==============================================
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y nginx curl
-
-# Static frontend
-mkdir -p "$WEB_ROOT"
-rm -f "$WEB_ROOT"/index.html "$WEB_ROOT"/web-info.json
-cp "$SRC_DIR/frontend/index.html" "$SRC_DIR/frontend/style.css" "$SRC_DIR/frontend/app.js" "$WEB_ROOT/"
-
-# Keep the template; user data turns it into /etc/nginx/conf.d/app.conf at boot
-cp "$SRC_DIR/frontend/nginx.conf.template" /etc/nginx/app.conf.template
-
-# Ubuntu's default site also listens on :80, so remove it
-rm -f /etc/nginx/sites-enabled/default
-rm -f /etc/nginx/conf.d/app.conf
-
-systemctl enable nginx
-
-# ---- Clean up so every instance launched from the AMI starts fresh ----
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-truncate -s 0 /etc/machine-id
-cloud-init clean --logs
-rm -f /home/ubuntu/.ssh/authorized_keys
-
-echo "Web AMI build done. Create the image now (do not reboot the builder first)."
+curl -fsSL -o /tmp/install.sh "https://raw.githubusercontent.com/Sanoj-sudo/aws-todoapp/${REPO_BRANCH}/scripts/install.sh"
+bash /tmp/install.sh web
